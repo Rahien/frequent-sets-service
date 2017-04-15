@@ -1,0 +1,7 @@
+skills:
+  transactions: 'select ?basket GROUP_CONCAT(DISTINCT ?skill; separator=",") AS ?items where {
+  ?basket a <http://data.europa.eu/esco/model#Occupation> .
+  ?rel a <http://data.europa.eu/esco/model#Relationship>.
+  ?rel <http://data.europa.eu/esco/model#isRelationshipFor> ?basket.
+  ?rel <http://data.europa.eu/esco/model#refersConcept> ?skill.
+} group by ?basket'
