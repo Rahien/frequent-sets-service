@@ -22,10 +22,8 @@ def transaction_query(config):
 class TransactionWalker:
     def __init__(self, config, limit=1000):
         self.config = config
-        self.offset = 0
         self.limit = limit
-        self.batch_current = 0
-        self.batch = None
+        self.reset()
 
     def __iter__(self):
         return self
@@ -40,6 +38,14 @@ class TransactionWalker:
 
     def next(self):
         return self.__next__()
+
+    def reset(self):
+        self.offset = 0
+        self.batch_current = 0
+        self.batch = None
+
+    def counted(self):
+        return self.batch_current + self.offset
 
     def has_more(self):
         # fetch batch first time
