@@ -25,14 +25,15 @@ class FPTree:
     #          support: 1 }
     def __init__(self, options):
         if options.get('tree'):
-            self.root = options['tree']
-            self.llheads = options['llheads']
+            self.tree = options['tree']
         else:
-            self.root = {
-                'item': None,
-                'children': {}
+            self.tree = {
+                'root': {
+                    'item': None,
+                    'children': {}
+                },
+                'llheads': {}
             }
-            self.llheads = {}
         self.mined = options.get('mined') or []
         self.conditional = options.get('conditional') or []
 
@@ -90,7 +91,7 @@ class FPTree:
     def add_transaction(self, transaction):
         print("receiving transaction")
         transaction = self.process_transaction(transaction)
-        target = self.root
+        target = self.tree['root']
 
         print("adding transaction")
         while len(transaction) > 0:
@@ -116,10 +117,10 @@ class FPTree:
     # add the given fp-tree node to the linked list for the item
     ###
     def add_to_linked_list(self, item, node):
-        if not item in self.llheads:
-            self.llheads[item] = node
+        if not item in self.tree['llheads']:
+            self.tree['llheads'][item] = node
         else:
-            target = self.llheads[item]
+            target = self.tree['llheads'][item]
             while target.get('next', None):
                 target = target['next']
             target['next'] = node
@@ -138,10 +139,10 @@ class FPTree:
     # whether or not an item is frequent in this fp tree
     ###
     def is_frequent_item(self,item):
-        target = self.llheads[item]
+        target = self.tree['llheads'][item]
         count = 0
         while target:
-            count += 1
+            count += target.get('support')
             target = target.get('next')
 
         return count >= self.min_support_count
@@ -150,7 +151,7 @@ class FPTree:
     # mine this fp tree for all frequent patterns (recursively)
     ###
     def mine_fp(self):
-        for item in self.llheads:
+        for item in self.tree['llheads']:
             if self.is_frequent_item(item):
                 mined = self.conditional[:]
                 mined.append(item)
@@ -163,19 +164,22 @@ class FPTree:
     # builds the conditional FP tree for the given item based on this tree
     ###
     def conditional_fp_tree(self, item):
-        new_tree = copy.deepcopy(self.root)
-        new_heads = copy.copy(self.llheads)
+        new_tree = copy.deepcopy(self.tree)
 
         condition = self.conditional[:]
         condition.append(item)
 
-        conditional = FPTree({'tree': new_tree, 'llheads': new_heads, 'mined': self.mined,'priorities': self.priorities, 'min_support': self.min_support, 'min_support_count': self.min_support_count, 'conditional': condition})
+        conditional = FPTree({'tree': new_tree, 'mined': self.mined,'priorities': self.priorities, 'min_support': self.min_support, 'min_support_count': self.min_support_count, 'conditional': condition})
 
         print("conditional tree for: "+str(conditional.conditional))
 
         conditional.recompute_supports(item)
         conditional.remove_item(item)
         conditional.prune_infrequent()
+
+        print("\n\n")
+        print(str(conditional))
+        print("\n\n")
 
         return conditional
 
@@ -186,26 +190,29 @@ class FPTree:
     def recompute_supports(self, item):
         self.clear_supports(item)
         self.build_supports(item)
+        self.recompute_linked_lists()
 
     ###
     # for building conditional fp tree
-    # sets the supports to 0 for all parent nodes for the given item
+    # sets the supports to 0 for nodes except for those of the given item
+    # keep the supports for the given item
     ###
     def clear_supports(self, item):
-        leaf = self.llheads[item]
-        while leaf:
-            target = leaf.get('parent')
-            while target:
+        todo = self.tree['root']['children'].values()
+        # for easier termination conditions everywhere...
+        self.tree['root']['support'] = 0
+        while todo:
+            target = todo.pop()
+            if target['item'] != item:
                 target['support'] = 0
-                target = target.get('parent')
-            leaf = leaf.get('next')
+            todo.extend(target['children'].values())
 
     ###
     # for building conditional fp tree
     # builds the supports by adding the numbers bottom up from the leaves
     ###
     def build_supports(self, item):
-        leaf = self.llheads[item]
+        leaf = self.tree['llheads'][item]
         while leaf:
             target = leaf
 
@@ -219,13 +226,33 @@ class FPTree:
 
     ###
     # for building conditional fp tree
+    # recompute the linked lists, skip nodes that now have a support of 0
+    ###
+    def recompute_linked_lists(self):
+        for node in self.tree['llheads'].values():
+            target = node
+            previous = None
+            while target:
+                next_node = target.get('next', None)
+                if not target['support']:
+                    if previous:
+                        previous['next'] = next_node
+                    else:
+                        self.tree['llheads'][target['item']] = next_node
+                else:
+                    previous = target
+                target = next_node
+
+    ###
+    # for building conditional fp tree
     # prunes all infrequent items in the tree
     ###
     def prune_infrequent(self):
-        for item in copy.copy(self.llheads):
+        for item in copy.copy(self.tree['llheads']):
             if not self.is_frequent_item(item):
                 self.prune_item(item)
-                self.llheads.pop(item,None)
+                print("pruning "+item)
+                self.tree['llheads'].pop(item,None)
 
     ###
     # for building conditional fp tree
@@ -243,19 +270,20 @@ class FPTree:
     # !! this means all nodes that are descendents of the item will be cut too !!
     ###
     def remove_item(self, item):
-        node = self.llheads[item]
+        print("removing item "+item)
+        node = self.tree['llheads'][item]
         while node:
             node['parent']['children'].pop(item,None)
             next = node.get('next')
             node['next'] = None
             node = next
 
-        self.llheads[item] = None
+        self.tree['llheads'][item] = None
 
     # making the string representation of the tree a little more friendly
     def __str__(self):
-        next_level = self.root['children'].values()
-        result_string = []
+        next_level = self.tree['root']['children'].values()
+        result_string = ["fp-tree, min-support:", str(self.min_support_count), "\nnodes:\n"]
 
         while next_level:
             current_level = sorted(next_level, key=lambda x: x['support'])
@@ -266,6 +294,10 @@ class FPTree:
                 next_level.extend(target['children'].values())
 
             result_string.append("\n\n")
+
+        result_string.append("linked-list:\n")
+        for key, target in self.tree['llheads'].items():
+            result_string.extend([key, " -> ", "{",target['item']," sup:",str(target['support'])," size:",str(len(target['children']))," parent:", (target['parent']['item'] or "None"),"}\n"])
 
         return ''.join(result_string)
 
