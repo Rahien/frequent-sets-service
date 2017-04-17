@@ -1,0 +1,13 @@
+@prefix basket: <http://localhost/basket/> .
+@prefix item: <http://localhost/item/> .
+
+basket:1 basket:contains item:a, item:b .
+basket:2 basket:contains item:b, item:c, item:d .
+basket:3 basket:contains item:a, item:c, item:d, item:e .
+basket:4 basket:contains item:a, item:d, item:e .
+basket:5 basket:contains item:a, item:b, item:c .
+basket:6 basket:contains item:a, item:b, item:c, item:d .
+basket:7 basket:contains item:a .
+basket:8 basket:contains item:a, item:b, item:c .
+basket:9 basket:contains item:a, item:b, item:d .
+basket:10 basket:contains item:b, item:c, item:e .
