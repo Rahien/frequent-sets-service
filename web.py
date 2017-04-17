@@ -2,6 +2,9 @@ import flask
 import json
 from database import fetch_transactions, transaction_iterator, transaction_count
 from fp_functions import FPTree
+import sys
+
+sys.setrecursionlimit(3000)
 
 @app.route("/version")
 def version():

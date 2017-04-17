@@ -156,17 +156,11 @@ class FPTree:
                 cond = self.conditional_fp_tree(item)
                 cond.mine_fp()
 
-
     ###
     # builds the conditional FP tree for the given item based on this tree
     ###
     def conditional_fp_tree(self, item):
-        new_tree = copy.deepcopy(self.tree)
-
-        condition = self.conditional[:]
-        condition.append(item)
-
-        conditional = FPTree({'tree': new_tree, 'mined': self.mined,'priorities': self.priorities, 'min_support': self.min_support, 'min_support_count': self.min_support_count, 'conditional': condition})
+        conditional = self.build_conditional_fp_tree(item)
 
         logging.debug("conditional tree for: %s",conditional.conditional)
 
@@ -177,6 +171,79 @@ class FPTree:
         logging.debug("\n\n%s\n\n", conditional)
 
         return conditional
+
+    ###
+    # builds a new conditional fp tree for the given item bottom up from the current tree
+    ###
+    def build_conditional_fp_tree(self, item):
+        new_tree = {
+            'root': {
+                'item': None,
+                'children': {},
+                'parent': None
+            },
+            'llheads': {}
+        }
+        condition = self.conditional[:]
+        condition.append(item)
+
+        conditional = FPTree({'tree': new_tree, 'mined': self.mined,'priorities': self.priorities, 'min_support': self.min_support, 'min_support_count': self.min_support_count, 'conditional': condition})
+
+        self.fill_conditional_tree_bottom_up(conditional, item)
+        return conditional
+
+    ###
+    # fills up the given conditional fp tree by walking through the original tree
+    # bottom up, using the linked list for the given item
+    #
+    # in this process, clones for the original nodes are remembered and then removed
+    ###
+    def fill_conditional_tree_bottom_up(self, conditional, item):
+        leaf = self.tree['llheads'][item]
+        self.tree['root']['clone'] = conditional.tree['root']
+
+        while leaf:
+            target = leaf
+            while target:
+                clone = target.get('clone')
+                # can stop /after/ this one if we have handled this one before
+                move_on = not clone
+                if not clone:
+                    clone = {
+                        'support': target['support'],
+                        'next': None,
+                        'item': target['item'],
+                        'children': {},
+                        'parent': None
+                    }
+                    target['clone'] = clone
+                    conditional.add_to_linked_list(clone['item'], clone)
+
+
+                for item, child in target['children'].items():
+                    childclone = child.get('clone', None)
+                    if childclone:
+                        childclone['parent'] = clone
+                        clone['children'][item] = childclone
+
+                target = target.get('parent', None)
+                if not move_on:
+                    target = None
+
+            leaf = leaf.get('next', None)
+
+        self.clean_clones()
+
+    ###
+    # removes the clones that are no longer needed. One clone war is enough.
+    ###
+    def clean_clones(self):
+        todo = [self.tree['root']]
+        while todo:
+            target = todo.pop()
+            target.pop('clone', None)
+            todo.extend(target['children'].values())
+
 
     ###
     # recomputes the supports for the given item, starting from the nodes with that item 
