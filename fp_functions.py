@@ -2,6 +2,7 @@ from database import fetch_transactions, transaction_iterator, transaction_count
 import pdb
 import copy
 import math
+import logging
 
 # frequency count for every item in a set of transactions
 def item_counts(transactions):
@@ -89,11 +90,9 @@ class FPTree:
     #            add this new node to the linked list for that item
     ###
     def add_transaction(self, transaction):
-        print("receiving transaction")
         transaction = self.process_transaction(transaction)
         target = self.tree['root']
 
-        print("adding transaction")
         while len(transaction) > 0:
             head = transaction.pop(0)
 
@@ -110,8 +109,6 @@ class FPTree:
 
             target = target['children'][head]
             target['support'] += 1
-
-        print("transaction done")
 
     ###
     # add the given fp-tree node to the linked list for the item
@@ -171,15 +168,13 @@ class FPTree:
 
         conditional = FPTree({'tree': new_tree, 'mined': self.mined,'priorities': self.priorities, 'min_support': self.min_support, 'min_support_count': self.min_support_count, 'conditional': condition})
 
-        print("conditional tree for: "+str(conditional.conditional))
+        logging.debug("conditional tree for: %s",conditional.conditional)
 
         conditional.recompute_supports(item)
         conditional.remove_item(item)
         conditional.prune_infrequent()
 
-        print("\n\n")
-        print(str(conditional))
-        print("\n\n")
+        logging.debug("\n\n%s\n\n", conditional)
 
         return conditional
 
@@ -251,7 +246,7 @@ class FPTree:
         for item in copy.copy(self.tree['llheads']):
             if not self.is_frequent_item(item):
                 self.prune_item(item)
-                print("pruning "+item)
+                logging.debug("pruning item %s",item)
                 self.tree['llheads'].pop(item,None)
 
     ###
@@ -270,7 +265,7 @@ class FPTree:
     # !! this means all nodes that are descendents of the item will be cut too !!
     ###
     def remove_item(self, item):
-        print("removing item "+item)
+        logging.debug("removing item %s",item)
         node = self.tree['llheads'][item]
         while node:
             node['parent']['children'].pop(item,None)

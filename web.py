@@ -17,7 +17,6 @@ def build_tree(config):
         'transactions':transaction_iterator(config),
         'min_support':float(flask.request.args.get('support', '0.005'))
     })
-    print('all done')
     data_as_str = json.dumps(map((lambda x: x['item'] + " sup:" + str(x['support']) + " size:" + str(len(x['children']))), fp.tree['root']['children'].values()))
     return flask.Response(response=data_as_str, status=200, mimetype="application/json")                    
 
@@ -35,6 +34,5 @@ def mine_tree(config):
         'transactions':transaction_iterator(config),
         'min_support':float(flask.request.args.get('support', '0.005'))
     })
-    print(str(fp))
     fp.mine_fp()
     return flask.Response(response=str(fp.mined), status=200, mimetype="text/plain")
