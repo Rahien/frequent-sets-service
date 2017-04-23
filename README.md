@@ -20,3 +20,8 @@ You can add it into a docker-compose.yml file like this:
 		links:
 			- virtuoso:database
 ```
+
+# TODO
+- better detection of whether itemset is already found in maximal itemset detection
+- improve memory use?
+- multithreading using queues and workers
