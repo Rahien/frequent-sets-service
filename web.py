@@ -27,7 +27,8 @@ def build_tree(config):
 def show_tree(config):
     fp = FPTree({
         'transactions':transaction_iterator(config),
-        'min_support':float(flask.request.args.get('support', '0.005'))
+        'min_support':float(flask.request.args.get('support', '0.005')),
+        'maximal_only':bool(flask.request.args.get('maxonly',True))
     })
     return flask.Response(response=str(fp), status=200, mimetype="text/plain")
 
@@ -35,7 +36,9 @@ def show_tree(config):
 def mine_tree(config):
     fp = FPTree({
         'transactions':transaction_iterator(config),
-        'min_support':float(flask.request.args.get('support', '0.005'))
+        'min_support':float(flask.request.args.get('support', '0.005')),
+        'maximal_only':bool(flask.request.args.get('maxonly',True))
     })
-    fp.mine_fp()
-    return flask.Response(response=str(fp.mined), status=200, mimetype="text/plain")
+    mined = []
+    fp.mine_fp(mined)
+    return flask.Response(response=str(mined), status=200, mimetype="text/plain")

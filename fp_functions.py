@@ -14,7 +14,33 @@ def item_counts(transactions):
             counts[item] = current + 1
     return counts
 
+# TODO this is horribly inefficient, have to replace this by something smarter,
+# e.g. tree representation of mined patterns
+def contains_pattern(mined,pattern):
+    pattern_found = False
+    for mined_p in mined:
+        prefix_found = True
+        index = -1
+        for item in pattern:
+            found = False
+            # use that the patterns are sorted by priority
+            while (index + 1) < len(mined_p):
+                index += 1
+                if mined_p[index] == item:
+                    found = True
+                    break
+            if not found:
+                prefix_found = False
+                break;
+        if prefix_found:
+            pattern_found = True
+            break;
+
+    return pattern_found
+
 class FPTree:
+    depth_count = 0
+
     # FP tree is made up of nodes and gets build by adding transactions
     # @param transactions: iterator of transaction objects
     # @param min_support: (default 0.005) min percentage of cases an item must have
@@ -35,7 +61,7 @@ class FPTree:
                 },
                 'llheads': {}
             }
-        self.mined = options.get('mined') or []
+        self.maximal_only = options.get('maximal_only', False)
         self.conditional = options.get('conditional') or []
 
         self.transactions = options.get('transactions')
@@ -145,17 +171,30 @@ class FPTree:
         return count >= self.min_support_count
 
     ###
-    # mine this fp tree for all frequent patterns (recursively)
+    # mine this fp tree for all frequent patterns (recursively), put mined results in mined
     ###
-    def mine_fp(self):
+    def mine_fp(self, mined):
+        FPTree.depth_count += 1
+        found_frequent = False
+
         for item in self.tree['llheads']:
             if self.is_frequent_item(item):
-                mined = self.conditional[:]
-                mined.append(item)
-                self.mined.append(mined)
+                found_frequent = True
+                if not self.maximal_only:
+                    cond = self.conditional[:]
+                    cond.append(item)
+                    mined.append(cond)
                 cond = self.conditional_fp_tree(item)
-                cond.mine_fp()
+                cond.mine_fp(mined)
 
+
+        frequent_pattern = self.conditional[:]
+        if self.maximal_only and (not found_frequent) and (not contains_pattern(mined, frequent_pattern)):
+            mined.append(frequent_pattern)
+        FPTree.depth_count -= 1
+
+        logging.info("\nmax_only: %s,depth: %s,mined: %s\n",
+                     self.maximal_only, FPTree.depth_count, len(mined))
     ###
     # builds the conditional FP tree for the given item based on this tree
     ###
@@ -187,7 +226,7 @@ class FPTree:
         condition = self.conditional[:]
         condition.append(item)
 
-        conditional = FPTree({'tree': new_tree, 'mined': self.mined,'priorities': self.priorities, 'min_support': self.min_support, 'min_support_count': self.min_support_count, 'conditional': condition})
+        conditional = FPTree({'tree': new_tree, 'priorities': self.priorities, 'min_support': self.min_support, 'min_support_count': self.min_support_count, 'conditional': condition, 'maximal_only': self.maximal_only })
 
         self.fill_conditional_tree_bottom_up(conditional, item)
         return conditional
