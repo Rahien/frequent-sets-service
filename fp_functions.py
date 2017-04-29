@@ -14,9 +14,18 @@ def item_counts(transactions):
             counts[item] = current + 1
     return counts
 
-# TODO this is horribly inefficient, have to replace this by something smarter,
-# e.g. tree representation of mined patterns
-def contains_pattern(mined,pattern):
+# purge patterns that are contained in larger patterns
+def purge_patterns(mined, priorities):
+    mined = sorted(mined, key=lambda x: -len(x))
+    max_patterns = []
+    for pattern in mined:
+        if not contains_pattern(max_patterns,pattern,priorities):
+            max_patterns.append(pattern)
+
+    return max_patterns
+
+# inefficient way of tracking whether a pattern was mined before
+def contains_pattern(mined,pattern, priorities=None):
     pattern_found = False
     for mined_p in mined:
         prefix_found = True
@@ -34,9 +43,17 @@ def contains_pattern(mined,pattern):
                 break;
         if prefix_found:
             pattern_found = True
+            if priorities:
+                logging.info('pattern %s mined twice, %s had it', prioritized_pattern(pattern, priorities), prioritized_pattern(mined_p,priorities))
             break;
 
     return pattern_found
+
+def prioritized_pattern(pattern,priorities):
+    result = []
+    for item in pattern:
+        result.append((item,priorities.get(item, 0)))
+    return result
 
 class FPTree:
     depth_count = 0
@@ -61,7 +78,6 @@ class FPTree:
                 },
                 'llheads': {}
             }
-        self.maximal_only = options.get('maximal_only', False)
         self.conditional = options.get('conditional') or []
 
         self.transactions = options.get('transactions')
@@ -176,25 +192,34 @@ class FPTree:
     def mine_fp(self, mined):
         FPTree.depth_count += 1
         found_frequent = False
+        first_conditional = next(iter(self.conditional or []), None)
 
-        for item in self.tree['llheads']:
+        logging.info("\nfirst-prio: %s,depth: %s,heads: %s,mined: %s\n",
+                     self.priorities.get(first_conditional,{}),
+                     FPTree.depth_count, len(self.tree['llheads']), len(mined))
+
+        sorted_heads = sorted(self.tree['llheads'].keys(), key=lambda x: -self.priorities[x]['index'])
+
+        for item in sorted_heads:
             if self.is_frequent_item(item):
                 found_frequent = True
-                if not self.maximal_only:
-                    cond = self.conditional[:]
-                    cond.append(item)
-                    mined.append(cond)
+
                 cond = self.conditional_fp_tree(item)
                 cond.mine_fp(mined)
 
 
         frequent_pattern = self.conditional[:]
-        if self.maximal_only and (not found_frequent) and (not contains_pattern(mined, frequent_pattern)):
+        if (not found_frequent) and (not contains_pattern(mined, frequent_pattern)):
             mined.append(frequent_pattern)
         FPTree.depth_count -= 1
 
-        logging.info("\nmax_only: %s,depth: %s,mined: %s\n",
-                     self.maximal_only, FPTree.depth_count, len(mined))
+        purged = []
+        if not self.conditional:
+            purged = purge_patterns(mined,self.priorities)
+            logging.info("\ntotal mined: %s\n", len(purged))
+
+        return purged
+
     ###
     # builds the conditional FP tree for the given item based on this tree
     ###
@@ -226,7 +251,7 @@ class FPTree:
         condition = self.conditional[:]
         condition.append(item)
 
-        conditional = FPTree({'tree': new_tree, 'priorities': self.priorities, 'min_support': self.min_support, 'min_support_count': self.min_support_count, 'conditional': condition, 'maximal_only': self.maximal_only })
+        conditional = FPTree({'tree': new_tree, 'priorities': self.priorities, 'min_support': self.min_support, 'min_support_count': self.min_support_count, 'conditional': condition })
 
         self.fill_conditional_tree_bottom_up(conditional, item)
         return conditional
@@ -352,18 +377,19 @@ class FPTree:
         for item in copy.copy(self.tree['llheads']):
             if not self.is_frequent_item(item):
                 self.prune_item(item)
-                logging.debug("pruning item %s",item)
-                self.tree['llheads'].pop(item,None)
 
     ###
     # for building conditional fp tree
     # prunes the given item by removing it an connecting its parent to its children if any
     # http://wimleers.com/sites/wimleers.com/files/FP-Growth%20presentation%20handouts%20%E2%80%94%C2%A0Florian%20Verhein.pdf
     # this seems an optional performance increase, so will not do it for now...
-    # it seems tougher wrt ll consistency
+    # it seems tougher wrt ll and tree consistency (mergers!!!)
+    #
+    # simply removing it from the heads will do for now...
     ###
     def prune_item(self, item):
-        return None
+        logging.debug("pruning item %s",item)
+        self.tree['llheads'].pop(item, None)
 
     ###
     # for building conditional fp tree
@@ -379,7 +405,7 @@ class FPTree:
             node['next'] = None
             node = next
 
-        self.tree['llheads'][item] = None
+        self.tree['llheads'].pop(item, None)
 
     # making the string representation of the tree a little more friendly
     def __str__(self):

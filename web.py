@@ -40,5 +40,5 @@ def mine_tree(config):
         'maximal_only':bool(flask.request.args.get('maxonly',True))
     })
     mined = []
-    fp.mine_fp(mined)
-    return flask.Response(response=str(mined), status=200, mimetype="text/plain")
+    max_patterns = fp.mine_fp(mined)
+    return flask.Response(response=str(max_patterns), status=200, mimetype="text/plain")
