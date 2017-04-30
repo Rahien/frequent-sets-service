@@ -31,7 +31,7 @@ class FPWorker(threading.Thread):
         return result
 
     def mine_tree(self,tree):
-        conditionals, pattern = tree.mine_fp_threaded()
+        conditionals, pattern = tree.mine_fp()
 
         first_conditional = next(iter(tree.conditional or []), None)
         depth = len(tree.conditional)
