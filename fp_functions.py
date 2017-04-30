@@ -16,13 +16,13 @@ def item_counts(transactions):
 
 # purge patterns that are contained in larger patterns
 def purge_patterns(mined, hard_purge = False, priorities=None):
-    mined = sorted(mined, key=lambda x: -len(x))
+    sorted_mined = sorted(mined, key=lambda x: -len(x))
     max_patterns = []
     purge_count = 0
-    for pattern in mined:
+    for pattern in sorted_mined:
         purge_list = max_patterns
         if hard_purge:
-            purge_list = mined
+            purge_list = sorted_mined
         if not contains_pattern(purge_list,pattern,priorities):
             max_patterns.append(pattern)
         else:
