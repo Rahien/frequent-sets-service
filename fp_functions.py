@@ -15,14 +15,22 @@ def item_counts(transactions):
     return counts
 
 # purge patterns that are contained in larger patterns
-def purge_patterns(mined, priorities):
+def purge_patterns(mined, hard_purge = False, priorities=None):
     mined = sorted(mined, key=lambda x: -len(x))
     max_patterns = []
+    purge_count = 0
     for pattern in mined:
-        if not contains_pattern(max_patterns,pattern,priorities):
+        purge_list = max_patterns
+        if hard_purge:
+            purge_list = mined
+        if not contains_pattern(purge_list,pattern,priorities):
             max_patterns.append(pattern)
+        else:
+            purge_count += 1
 
-    return max_patterns
+    logging.info("purged %s patterns", purge_count)
+
+    mined[:] = max_patterns
 
 # inefficient way of tracking whether a pattern was mined before
 def contains_pattern(mined,pattern, priorities=None):
@@ -41,7 +49,7 @@ def contains_pattern(mined,pattern, priorities=None):
             if not found:
                 prefix_found = False
                 break;
-        if prefix_found:
+        if prefix_found and (not pattern is mined_p):
             pattern_found = True
             if priorities:
                 logging.info('pattern %s mined twice, %s had it', prioritized_pattern(pattern, priorities), prioritized_pattern(mined_p,priorities))
@@ -186,38 +194,27 @@ class FPTree:
 
         return count >= self.min_support_count
 
-    ###
-    # mine this fp tree for all frequent patterns (recursively), put mined results in mined
-    ###
-    def mine_fp(self, mined):
+    # mines the given fp tree non-recursively,
+    # returns the trees still to be mined because of this tree 
+    # and a frequent pattern if any was found
+    def mine_fp(self):
         found_frequent = False
-        first_conditional = next(iter(self.conditional or []), None)
-        depth = len(self.conditional)
-
-        logging.info("\nfirst-prio: %s,depth: %s,heads: %s,mined: %s\n",
-                     self.priorities.get(first_conditional,{}),
-                     depth, len(self.tree['llheads']), len(mined))
 
         sorted_heads = sorted(self.tree['llheads'].keys(), key=lambda x: -self.priorities[x]['index'])
+
+        conditionals = []
 
         for item in sorted_heads:
             if self.is_frequent_item(item):
                 found_frequent = True
-
-                cond = self.conditional_fp_tree(item)
-                cond.mine_fp(mined)
+                conditionals.append(self.conditional_fp_tree(item))
 
 
         frequent_pattern = self.conditional[:]
-        if (not found_frequent) and (not contains_pattern(mined, frequent_pattern)):
-            mined.append(frequent_pattern)
+        if found_frequent: # not maximal
+            frequent_pattern = None
 
-        purged = []
-        if not self.conditional:
-            purged = purge_patterns(mined,self.priorities)
-            logging.info("\ntotal mined: %s\n", len(purged))
-
-        return purged
+        return conditionals, frequent_pattern
 
     ###
     # builds the conditional FP tree for the given item based on this tree
