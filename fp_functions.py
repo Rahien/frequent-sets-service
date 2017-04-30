@@ -190,13 +190,13 @@ class FPTree:
     # mine this fp tree for all frequent patterns (recursively), put mined results in mined
     ###
     def mine_fp(self, mined):
-        FPTree.depth_count += 1
         found_frequent = False
         first_conditional = next(iter(self.conditional or []), None)
+        depth = len(self.conditional)
 
         logging.info("\nfirst-prio: %s,depth: %s,heads: %s,mined: %s\n",
                      self.priorities.get(first_conditional,{}),
-                     FPTree.depth_count, len(self.tree['llheads']), len(mined))
+                     depth, len(self.tree['llheads']), len(mined))
 
         sorted_heads = sorted(self.tree['llheads'].keys(), key=lambda x: -self.priorities[x]['index'])
 
@@ -211,7 +211,6 @@ class FPTree:
         frequent_pattern = self.conditional[:]
         if (not found_frequent) and (not contains_pattern(mined, frequent_pattern)):
             mined.append(frequent_pattern)
-        FPTree.depth_count -= 1
 
         purged = []
         if not self.conditional:
