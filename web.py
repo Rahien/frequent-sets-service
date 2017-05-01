@@ -3,12 +3,13 @@ import json
 from database import fetch_transactions, transaction_iterator, transaction_count
 from fp_functions import FPTree, purge_patterns
 from fp_worker import FPWorker
-from fp_cleaner import FPCleaner
-import threading
+from fp_merger import FPMerger
 import thread
 import sys
 import os
 import helpers
+import pdb
+from multiprocessing import Queue
 
 sys.setrecursionlimit(3000)
 
@@ -30,7 +31,7 @@ def build_tree(config):
     })
     data_as_str = json.dumps(map((lambda x: x['item'] + " sup:" + str(x['support']) + " size:" + str(len(x['children']))), fp.tree['root']['children'].values()))
     return flask.Response(response=data_as_str, status=200, mimetype="application/json")                    
-
+    
 @app.route("/show-fp/<config>")
 def show_tree(config):
     fp = FPTree({
@@ -48,13 +49,25 @@ def mining_state(id):
     result = process.get('result', None)
 
     if not result:
-        res = json.dumps({"queue":len(process.get('queue', [])), 
-                          "mined": len(process.get('mined', [])) })
+        workers_alive = 0
+        for worker in process.get('workers'):
+            if worker.is_alive():
+                workers_alive += 1
+        
+        res = json.dumps({
+            "queue":process.get('queue').qsize(), 
+            "mined": process.get('mined').qsize(),
+            "workers": workers_alive
+        })
         return flask.Response(response=res, status=202, mimetype="application/json")
     else:
         res = json.dumps(result)
         processes.pop(id, None)
         return flask.Response(response = res, status=200, mimetype="application/json")
+
+@app.route("/minings")
+def get_minings():
+    return flask.Response(response = json.dumps(processes.keys()), status = 200, mimetype="application/json")
 
 @app.route("/mine-fp/<config>")
 def mine_tree(config):
@@ -72,12 +85,6 @@ def do_threaded_mining(config, support, process):
         'transactions':transaction_iterator(config),
         'min_support': support
     })
-    mined = []
-    queue = []
-    process['mined'] = mined
-    process['queue'] = queue
-    lock = threading.Lock()
-    workers = []
 
     max_prio = sorted(fp.tree['llheads'].keys(), key=lambda x: -fp.priorities[x]['index'])
     if max_prio:
@@ -86,23 +93,35 @@ def do_threaded_mining(config, support, process):
         max_prio = 0
 
     # first fill up queue
+    main_queue = Queue()
+    mined_queue = Queue()
+
+    process['mined'] = mined_queue
+    process['queue'] = main_queue
+    workers = []
+    process['workers'] = workers
+
     conditionals, unused_frequent_pattern = fp.mine_fp()
-    queue.extend(conditionals)
-    threads = int(os.environ.get('FP_WORKERS'))
-    for number in range(1,threads):
-        worker = FPWorker(number, queue,max_prio, mined, lock)
+    for conditional in conditionals:
+        main_queue.put(conditional)
+
+    worker_count = int(os.environ.get('FP_WORKERS'))
+
+    for number in range(0,worker_count):
+        worker = FPWorker(main_queue, mined_queue, max_prio)
         workers.append(worker)
         worker.start()
 
-    cleaner = FPCleaner("cleaner", 6,queue, mined, lock)
-    cleaner.start()
+    result_queue = Queue()
+    merger = FPMerger("merger", 60, mined_queue, result_queue, worker_count)
+    merger.start()
 
     for worker in workers:
         worker.join()
 
-    cleaner.join()
+    merger.join()
 
-    purge_patterns(mined, hard_purge=True)
-    
-    process['result'] = mined
-
+    result = result_queue.get()
+    purge_patterns(result, hard_purge=True)
+        
+    process['result'] = result
