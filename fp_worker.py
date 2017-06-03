@@ -21,16 +21,16 @@ class FPWorker(multiprocessing.Process):
             todo = self.next()
                 
         # notify suicide
-        self.mined_queue.put(None)
+        self.mined_queue.append(None)
         print "Exiting " + self.name
 
     def next(self, lives = 3):
         result = None
-        if self.queue:
+        try:
             result = self.queue.pop()
-        if not result:
+        except:
             try:
-                result = self.main_queue.get(False)
+                result = self.main_queue.pop()
             except:
                 result = None
 
@@ -47,7 +47,8 @@ class FPWorker(multiprocessing.Process):
             self.queue.extend(conditionals[:to_take])
 
             for conditional in conditionals[to_take:]:
-                self.main_queue.put(conditional)
+                self.main_queue.append(conditional)
+        logging.info("own: {}, main: {}".format(len(self.queue), len(self.main_queue)))
             
     def mine_tree(self,tree):
         conditionals, pattern = tree.mine_fp()
@@ -56,7 +57,7 @@ class FPWorker(multiprocessing.Process):
         depth = len(tree.conditional)
 
         if pattern:
-            self.mined_queue.put(pattern)
+            self.mined_queue.append(pattern)
 
         self.add_to_queue(conditionals)
 

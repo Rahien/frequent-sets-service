@@ -20,7 +20,7 @@ class FPMerger(multiprocessing.Process):
         
         while not queue_empty:
             try:
-                mined = self.mined_queue.get(False)
+                mined = self.mined_queue.pop()
                 if not mined:
                     # a worker gave up on life
                     self.workers -= 1
@@ -40,5 +40,5 @@ class FPMerger(multiprocessing.Process):
             self.merge_mined()
 
         self.merge_mined()
-        self.result_queue.put(self.all_mined)
+        self.result_queue.append(self.all_mined)
         print "Exiting " + self.name

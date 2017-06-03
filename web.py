@@ -9,9 +9,9 @@ import sys
 import os
 import helpers
 import pdb
-from multiprocessing import Queue
+from multiprocessing import Manager
 
-sys.setrecursionlimit(3000)
+sys.setrecursionlimit(10000)
 
 processes = {}
 
@@ -55,8 +55,8 @@ def mining_state(id):
                 workers_alive += 1
         
         res = json.dumps({
-            "queue":process.get('queue').qsize(), 
-            "mined": process.get('mined').qsize(),
+            "queue":len(process.get('queue')),
+            "mined": len(process.get('mined')),
             "workers": workers_alive
         })
         return flask.Response(response=res, status=202, mimetype="application/json")
@@ -93,8 +93,9 @@ def do_threaded_mining(config, support, process):
         max_prio = 0
 
     # first fill up queue
-    main_queue = Queue()
-    mined_queue = Queue()
+    manager = Manager()
+    main_queue = manager.list()
+    mined_queue = manager.list()
 
     process['mined'] = mined_queue
     process['queue'] = main_queue
@@ -103,17 +104,17 @@ def do_threaded_mining(config, support, process):
 
     conditionals, unused_frequent_pattern = fp.mine_fp()
     for conditional in conditionals:
-        main_queue.put(conditional)
+        main_queue.append(conditional)
 
-    worker_count = int(os.environ.get('FP_WORKERS'))
+    worker_count = int(os.environ.get('FP_WORKERS') or 1)
 
     for number in range(0,worker_count):
         worker = FPWorker(main_queue, mined_queue, max_prio)
         workers.append(worker)
         worker.start()
 
-    result_queue = Queue()
-    merger = FPMerger("merger", 60, mined_queue, result_queue, worker_count)
+    result_queue = manager.list()
+    merger = FPMerger("merger", 30, mined_queue, result_queue, worker_count)
     merger.start()
 
     for worker in workers:
@@ -121,7 +122,7 @@ def do_threaded_mining(config, support, process):
 
     merger.join()
 
-    result = result_queue.get()
+    result = result_queue.pop()
     purge_patterns(result, hard_purge=True)
         
     process['result'] = result
