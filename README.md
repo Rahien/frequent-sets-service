@@ -1,4 +1,4 @@
-WIP mu.semte.ch service to compute frequent item sets.
+Basic mu.semte.ch service to compute frequent item sets.
 
 # Building the image
 Build the docker image using
